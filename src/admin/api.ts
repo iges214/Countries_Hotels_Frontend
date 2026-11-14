@@ -169,6 +169,9 @@ export const adminApi = {
       ...(id ? { id } : {}),
     }),
   deleteBranch: (id: number) => send<void>(base(id), "DELETE"),
+  setDefaultBranch: (id: number) => send<void>(`/branches/${id}/default`, "POST"),
+  setBranchActive: (id: number, isActive: boolean) =>
+    send<void>(`/branches/${id}/active`, "PUT", { isActive }),
   confirm: (b: number, id: number) =>
     send<void>(base(b) + `/bookings/${id}/admin/confirm`, "PUT"),
   cancel: (b: number, id: number) =>

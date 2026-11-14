@@ -169,8 +169,12 @@ function AdminWorkspace() {
   const branches = (branchData.data || []).filter(
     (b) => access?.isSystemAdministrator || access?.branchIds.includes(b.id),
   );
+  const activeBranches = branches.filter((b) => b.isActive !== false);
   const branchId = Number(params.get("branch"));
-  const branch = branches.find((b) => b.id === branchId) || branches[0];
+  const branch =
+    activeBranches.find((b) => b.id === branchId) ||
+    activeBranches.find((b) => b.isDefaultBranch) ||
+    [...activeBranches].sort((a, b) => a.id - b.id)[0];
   const to = (path = "") =>
     "/admin" +
     (path ? "/" + path : "") +

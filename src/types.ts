@@ -21,6 +21,8 @@ export interface Branch {
   timeZoneId: string;
   totalRooms: number;
   brandName: string;
+  isActive?: boolean;
+  isDefaultBranch?: boolean;
 }
 export interface Profile {
   name: string;

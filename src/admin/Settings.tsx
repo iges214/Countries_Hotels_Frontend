@@ -103,8 +103,42 @@ export function Branches() {
                   </small>
                   <small>{b.totalRooms} operational rooms</small>
                   <small>{b.address}</small>
+                  <small>
+                    {b.isActive === false ? "Inactive" : "Active"}
+                    {b.isDefaultBranch ? " · Default branch" : ""}
+                  </small>
                 </div>
                 <div className="ad-stack">
+                  {access.isSystemAdministrator && (
+                    <>
+                      {!b.isDefaultBranch && b.isActive !== false && (
+                        <button
+                          className="ad-btn small"
+                          disabled={action.busy}
+                          onClick={() =>
+                            void action.run(async () => {
+                              await adminApi.setDefaultBranch(b.id);
+                              refreshBranches();
+                            }, `${b.name} is now the default branch.`)
+                          }
+                        >
+                          Set as default
+                        </button>
+                      )}
+                      <button
+                        className="ad-btn small"
+                        disabled={action.busy}
+                        onClick={() =>
+                          void action.run(async () => {
+                            await adminApi.setBranchActive(b.id, b.isActive === false);
+                            refreshBranches();
+                          }, `${b.name} ${b.isActive === false ? "activated" : "deactivated"}.`)
+                        }
+                      >
+                        {b.isActive === false ? "Activate branch" : "Deactivate branch"}
+                      </button>
+                    </>
+                  )}
                   <button
                     className="ad-btn small"
                     onClick={() => setEditing(b)}

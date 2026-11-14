@@ -1,0 +1,94 @@
+.site-content {
+  display: contents;
+}
+.site-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 24px;
+  background: #f8f5ef;
+  color: #103d32;
+  text-align: center;
+  font-family: "Plus Jakarta Sans Variable", system-ui, sans-serif;
+}
+.site-loader__mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 82px;
+  height: 82px;
+  margin-bottom: 24px;
+  font: 46px Georgia, serif;
+}
+.site-loader__mark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid #dfd6c6;
+  border-top-color: #ae8143;
+  border-right-color: #103d32;
+  border-radius: 50%;
+  animation: hotel-loader-spin 1.2s linear infinite;
+}
+.site-loader__brand {
+  margin: 0;
+  font: 26px/1.4 "Playfair Display Variable", Georgia, serif;
+}
+.site-loader__message {
+  margin: 12px 0 0;
+  color: #606861;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.request-loader {
+  position: fixed;
+  inset: auto 16px 24px;
+  z-index: 5000;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.request-loader__pill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 20px;
+  border: 1px solid #d7b77b;
+  border-radius: 999px;
+  background: #103d32;
+  color: #fffaf0;
+  box-shadow: 0 8px 28px #092e2726;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.loading-spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: hotel-loader-spin 0.8s linear infinite;
+}
+.inline-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  color: #606861;
+  font-size: 14px;
+}
+@keyframes hotel-loader-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-loader__mark::before,
+  .loading-spinner {
+    animation: none;
+  }
+}

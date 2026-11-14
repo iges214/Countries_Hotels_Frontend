@@ -447,14 +447,19 @@ export function Empty({
 export function Loading({ cards = 3 }: { cards?: number }) {
   return (
     <div
-      className="skeleton-grid"
+      className="loading-section"
       role="status"
       aria-label="Loading hotel information"
     >
-      {Array.from({ length: cards }, (_, i) => (
-        <div className="skeleton" key={i} />
-      ))}
-      <span className="sr-only">Loading…</span>
+      <div className="inline-loading" aria-hidden="true">
+        <span className="loading-spinner" />
+        Loading hotel information…
+      </div>
+      <div className="skeleton-grid" aria-hidden="true">
+        {Array.from({ length: cards }, (_, i) => (
+          <div className="skeleton" key={i} />
+        ))}
+      </div>
     </div>
   );
 }

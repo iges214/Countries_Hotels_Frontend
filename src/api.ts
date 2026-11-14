@@ -11,6 +11,7 @@ import type {
   Stay,
 } from "./types";
 import { roomQuery, storageSet } from "./stay";
+import { beginRequest, finishRequest } from "./requestActivity";
 const origin = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 export const DEMO =
   import.meta.env.DEV &&
@@ -213,6 +214,7 @@ async function send<T>(path: string, options: RequestInit, token?: string): Prom
     () => controller.abort(),
     options.method ? 30000 : 20000,
   );
+  beginRequest();
   try {
     const response = await fetch(origin + "/api/v1" + path, {
       ...options,
@@ -270,6 +272,7 @@ async function send<T>(path: string, options: RequestInit, token?: string): Prom
     );
   } finally {
     clearTimeout(timer);
+    finishRequest();
   }
 }
 export function query(

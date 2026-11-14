@@ -129,6 +129,24 @@ describe("typed API boundaries", () => {
     vi.stubGlobal("location", { search: "" });
     vi.stubGlobal("window", new EventTarget());
   });
+  it("keeps loading active until concurrent requests finish, including failures", async () => {
+    let resolveFirst!: (response: Response) => void;
+    let rejectSecond!: (reason: Error) => void;
+    vi.stubGlobal("fetch", vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise<Response>((_, reject) => { rejectSecond = reject; })));
+    const { request } = await import("../src/api");
+    const { requestActivity } = await import("../src/requestActivity");
+    const first = request("/first");
+    const second = request("/second").catch((error) => error);
+    expect(requestActivity.getSnapshot()).toBe(2);
+    resolveFirst(new Response("{}"));
+    await first;
+    expect(requestActivity.getSnapshot()).toBe(1);
+    rejectSecond(new Error("Connection interrupted"));
+    expect(await second).toMatchObject({ status: 0 });
+    expect(requestActivity.getSnapshot()).toBe(0);
+  });
   it("follows pagination and sends explicit dates and filters", async () => {
     const fetch = vi
       .fn()

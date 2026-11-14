@@ -66,15 +66,19 @@ export function HotelProvider({ children }: { children: ReactNode }) {
     Promise.all([api.branches(), api.profile()])
       .then(([b, p]) => {
         if (!active) return;
-        setBranches(b);
+        const activeBranches = b.filter((branch) => branch.isActive !== false);
+        const fallbackBranch =
+          activeBranches.find((branch) => branch.isDefaultBranch) ||
+          [...activeBranches].sort((a, b) => a.id - b.id)[0];
+        setBranches(activeBranches);
         setProfile(p);
         updateStay((s) => {
           const next = {
             ...s,
-            branchId: b.some((b) => b.id === s.branchId)
+            branchId: activeBranches.some((b) => b.id === s.branchId)
               ? s.branchId
-              : b[0]?.id || 0,
-            roomIds: b.some((b) => b.id === s.branchId) ? s.roomIds : [],
+              : fallbackBranch?.id || 0,
+            roomIds: activeBranches.some((b) => b.id === s.branchId) ? s.roomIds : [],
           };
           storageSet(
             DEMO ? "iges.demo.stay" : "iges.stay",
