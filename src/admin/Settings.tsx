@@ -24,6 +24,7 @@ import {
   type WebsiteSettings,
 } from "./api";
 import { useAdmin } from "./context";
+import { useAdminNavigationGuard } from "./NavigationGuard";
 import {
   Badge,
   Card,
@@ -55,10 +56,16 @@ const branchDefaults: BranchDraft = {
 };
 export function Branches() {
   const { branches, branch, access, to, refreshBranches } = useAdmin();
+  const navigation = useAdminNavigationGuard();
   const countries = useData(adminApi.countries, []);
   const [editing, setEditing] = useState<AdminBranch | "new">();
   const [deleting, setDeleting] = useState<AdminBranch>();
   const action = useAction();
+  async function runBranchAction(run: () => Promise<void>, message: string) {
+    if (!navigation.confirmDiscard()) return false;
+    setEditing(undefined);
+    return action.run(run, message);
+  }
   return (
     <>
       <PageTitle
@@ -70,7 +77,9 @@ export function Branches() {
             <Link className="ad-btn" to={to("countries")}>
               Manage countries
             </Link>
-            <button className="ad-btn gold" onClick={() => setEditing("new")}>
+            <button className="ad-btn gold" onClick={() => {
+              if (editing !== "new" && navigation.confirmDiscard()) setEditing("new");
+            }}>
               <Plus size={18} />
               Add branch
             </button>
@@ -116,7 +125,7 @@ export function Branches() {
                           className="ad-btn small"
                           disabled={action.busy}
                           onClick={() =>
-                            void action.run(async () => {
+                            void runBranchAction(async () => {
                               await adminApi.setDefaultBranch(b.id);
                               refreshBranches();
                             }, `${b.name} is now the default branch.`)
@@ -129,7 +138,7 @@ export function Branches() {
                         className="ad-btn small"
                         disabled={action.busy}
                         onClick={() =>
-                          void action.run(async () => {
+                          void runBranchAction(async () => {
                             await adminApi.setBranchActive(b.id, b.isActive === false);
                             refreshBranches();
                           }, `${b.name} ${b.isActive === false ? "activated" : "deactivated"}.`)
@@ -141,7 +150,9 @@ export function Branches() {
                   )}
                   <button
                     className="ad-btn small"
-                    onClick={() => setEditing(b)}
+                    onClick={() => {
+                      if ((editing === "new" || editing?.id !== b.id) && navigation.confirmDiscard()) setEditing(b);
+                    }}
                   >
                     Edit branch
                   </button>
@@ -202,7 +213,7 @@ export function Branches() {
               disabled={action.busy}
               onClick={async () => {
                 if (
-                  await action.run(async () => {
+                  await runBranchAction(async () => {
                     await adminApi.deleteBranch(deleting.id);
                     refreshBranches();
                   }, "Branch deleted.")
@@ -257,7 +268,7 @@ function BranchForm({
   );
   const [baseline] = useState(JSON.stringify(form));
   const dirty = baseline !== JSON.stringify(form);
-  useDirtyGuard(dirty);
+  const guard = useDirtyGuard(dirty);
   const set = <K extends keyof BranchDraft>(key: K, value: BranchDraft[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
   const setLocation = <K extends "countryId" | "state" | "city">(
@@ -332,6 +343,7 @@ function BranchForm({
             onSaved();
         }}
       >
+        <fieldset className="ad-form-fields" disabled={action.busy}>
         <Field label="Branch name">
           <input
             required
@@ -475,13 +487,13 @@ function BranchForm({
             type="button"
             className="ad-btn"
             onClick={() => {
-              if (!dirty || window.confirm("Discard unsaved branch changes?"))
-                onClose();
+              if (guard.confirmDiscard()) onClose();
             }}
           >
             Cancel
           </button>
         </div>
+      </fieldset>
       </form>
       {branch && (
         <p className="ad-note">
@@ -523,7 +535,7 @@ function WebsiteForm({ initial }: { initial: WebsiteSettings }) {
   const action = useAction();
   const upload = useAction();
   const [baseline, setBaseline] = useState(JSON.stringify(initial));
-  useDirtyGuard(JSON.stringify(form) !== baseline);
+  const guard = useDirtyGuard(JSON.stringify(form) !== baseline);
   const set = <K extends keyof WebsiteSettings>(
     key: K,
     value: WebsiteSettings[K],
@@ -535,10 +547,12 @@ function WebsiteForm({ initial }: { initial: WebsiteSettings }) {
         await action.run(async () => {
           await adminApi.saveWebsite(branch!.id, form);
           setBaseline(JSON.stringify(form));
+          guard.markClean();
           hotel.reload();
         }, "Website settings saved. Published details are now available on the public website.");
       }}
     >
+      <fieldset className="ad-form-fields" disabled={action.busy || upload.busy}>
       <PageTitle
         title="Website settings"
         description="Make the public website feel like your hotel."
@@ -694,6 +708,7 @@ function WebsiteForm({ initial }: { initial: WebsiteSettings }) {
           </Card>
         </div>
       </div>
+    </fieldset>
     </form>
   );
 }
@@ -705,6 +720,7 @@ export function Administrators() {
     [branch?.id],
   );
   const [email, setEmail] = useState("");
+  const assignmentGuard = useDirtyGuard(Boolean(email));
   const [revoke, setRevoke] = useState<number>();
   const action = useAction();
   return (
@@ -791,10 +807,12 @@ export function Administrators() {
                 await action.run(async () => {
                   await adminApi.assign(branch.id, email.trim());
                   setEmail("");
+                  assignmentGuard.markClean();
                   data.retry();
                 }, "Branch administrator assigned.");
               }}
             >
+              <fieldset className="ad-form-fields" disabled={action.busy}>
               <p>
                 Choose an existing registered account to manage {branch.name}.
               </p>
@@ -830,6 +848,7 @@ export function Administrators() {
               <button className="ad-btn gold full" disabled={action.busy}>
                 Assign access
               </button>
+            </fieldset>
             </form>
           ) : access.isSystemAdministrator ? (
             <>
@@ -896,6 +915,9 @@ export function Account() {
   const [next, setNext] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [show, setShow] = useState(false);
+  const [savedProfile, setSavedProfile] = useState(JSON.stringify([first, last]));
+  const profileGuard = useDirtyGuard(JSON.stringify([first, last]) !== savedProfile);
+  const passwordGuard = useDirtyGuard(Boolean(current || next || confirmation));
   return (
     <>
       <PageTitle
@@ -910,10 +932,13 @@ export function Account() {
                 e.preventDefault();
                 await profile.run(async () => {
                   await adminApi.saveAccount(first.trim(), last.trim());
+                  setSavedProfile(JSON.stringify([first, last]));
+                  profileGuard.markClean();
                   refreshAccess();
                 }, "Profile saved.");
               }}
             >
+              <fieldset className="ad-form-fields" disabled={profile.busy || password.busy}>
               <div className="ad-account-heading">
                 <span className="ad-avatar large">{first[0] || "A"}</span>
                 <span>
@@ -952,12 +977,14 @@ export function Account() {
               <button className="ad-btn gold" disabled={profile.busy}>
                 Save profile
               </button>
+            </fieldset>
             </form>
           </Card>
           <Card title="Change password">
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                if (!profileGuard.confirmDiscard()) return;
                 await password.run(async () => {
                   const issue = passwordErrors(next);
                   if (issue) throw new ApiError(400, issue);
@@ -965,6 +992,8 @@ export function Account() {
                     throw new ApiError(400, "Your new passwords do not match.");
                   const session = getSession();
                   await adminApi.password(current, next);
+                  passwordGuard.markClean();
+                  profileGuard.markClean();
                   setCurrent("");
                   setNext("");
                   setConfirmation("");
@@ -975,6 +1004,7 @@ export function Account() {
                 }, "Password updated. Sign in with your new password.");
               }}
             >
+              <fieldset className="ad-form-fields" disabled={profile.busy || password.busy}>
               <Field label="Current password">
                 <input
                   required
@@ -1017,6 +1047,7 @@ export function Account() {
               <button className="ad-btn gold" disabled={password.busy}>
                 Update password
               </button>
+            </fieldset>
             </form>
           </Card>
         </div>
@@ -1093,6 +1124,10 @@ export function Countries() {
   const [name, setName] = useState("");
   const [short, setShort] = useState("");
   const [deleting, setDeleting] = useState<Country>();
+  const countryGuard = useDirtyGuard(Boolean(editing) && (
+    name !== (editing && editing !== "new" ? editing.name : "") ||
+    short !== (editing && editing !== "new" ? editing.shortName : "")
+  ));
   if (!access.isSystemAdministrator)
     return <EmptyState title="System administrator access required" />;
   return (
@@ -1167,7 +1202,9 @@ export function Countries() {
       {editing && (
         <Modal
           title={editing === "new" ? "Add country" : "Edit country"}
-          onClose={() => !action.busy && setEditing(undefined)}
+          onClose={() => {
+            if (!action.busy && countryGuard.confirmDiscard()) setEditing(undefined);
+          }}
         >
           <div className="admin-app ad-modal-content">
             <form
@@ -1186,6 +1223,7 @@ export function Countries() {
                   setEditing(undefined);
               }}
             >
+              <fieldset className="ad-form-fields" disabled={action.busy}>
               <Field label="Name">
                 <input
                   required
@@ -1206,6 +1244,7 @@ export function Countries() {
               <button className="ad-btn gold" disabled={action.busy}>
                 Save country
               </button>
+            </fieldset>
             </form>
           </div>
         </Modal>

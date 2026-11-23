@@ -16,6 +16,7 @@ import {
   NotFound,
 } from "./pages/Discover";
 import { Auth } from "./pages/Auth";
+import { PasswordRecovery } from "./pages/PasswordRecovery";
 import { BookingPage } from "./pages/Booking";
 import { MyBookings, BookingDetails, BookingEdit } from "./pages/MyBookings";
 import { AdminApp } from "./admin/AdminApp";
@@ -43,6 +44,8 @@ function Metadata() {
       "/booking": "Plan your stay",
       "/login": "Welcome back",
       "/register": "Create your guest account",
+      "/forgot-password": "Reset your password",
+      "/reset-password": "Choose a new password",
       "/my-bookings": "My bookings",
       "/profile": "My profile",
       "/privacy": "Privacy information",
@@ -171,8 +174,8 @@ export default function App() {
       <main id="main" tabIndex={-1}>
         <PageBoundary
           key={
-            loc.pathname === "/login"
-              ? "/login"
+            ["/login", "/forgot-password", "/reset-password"].includes(loc.pathname)
+              ? loc.pathname
               : loc.pathname + (auth?.id || "guest")
           }
         >
@@ -204,10 +207,10 @@ export default function App() {
               path="/my-bookings/:branchId/:bookingId/edit"
               element={<BookingEdit />}
             />
+            <Route path="/forgot-password" element={<PasswordRecovery />} />
+            <Route path="/reset-password" element={<PasswordRecovery key={loc.search} reset />} />
+            <Route path="/reset-success" element={<CapabilityPage recovery />} />
             {[
-              "/forgot-password",
-              "/reset-password",
-              "/reset-success",
               "/verify-email",
               "/verification-expired",
               "/resend-verification",

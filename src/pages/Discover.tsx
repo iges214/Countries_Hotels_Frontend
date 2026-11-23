@@ -832,26 +832,27 @@ export function Policy({ type }: { type: "privacy" | "terms" }) {
     </section>
   );
 }
-export function CapabilityPage() {
+export function CapabilityPage({ recovery = false }: { recovery?: boolean }) {
   return (
     <section className="container prose section-pad">
       <div className="eyebrow">ACCOUNT SUPPORT</div>
       <h1>Let’s get you back in.</h1>
       <div className="info-note">
         <div>
-          <h3>Online account recovery is not available yet.</h3>
+          <h3>{recovery ? "Finish your password reset." : "Email verification is not available yet."}</h3>
           <p>
-            Online password recovery and email verification are not supported by
-            the current hotel service. No reset or verification email has been
-            sent.
+            {recovery ? "Use the reset link in your email to choose a new password. A success confirmation appears only after the service accepts your new password." : <>Email verification is not supported by the current hotel service.
+            No verification email has been sent. Password recovery is available
+            through the reset-password form.</>}
           </p>
         </div>
       </div>
       <p>
-        If you remember your password, return to sign in. Otherwise contact
-        management using a verified channel for account assistance.
+        If you have forgotten your password, request a reset link. Contact
+        management using a verified channel for other account assistance.
       </p>
       <div className="button-row">
+        <Link className="button outline" to="/forgot-password">Reset password</Link>
         <Link className="button" to="/login">
           Back to sign in
         </Link>

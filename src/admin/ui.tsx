@@ -255,12 +255,7 @@ export function useAction() {
     ),
   };
 }
-export const money = (amount: number, currency = "NGN") =>
-  new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
+export { money } from "../stay";
 export const date = (value: string, zone = "Africa/Lagos", time = false) =>
   new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
@@ -297,13 +292,4 @@ export function validImage(file: File) {
   if (!["image/jpeg", "image/png", "image/webp"].includes(file.type))
     throw new ApiError(400, "Choose a JPEG, PNG or WebP image.");
 }
-export function useDirtyGuard(dirty: boolean) {
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
-}
+export { useDirtyGuard } from "./NavigationGuard";

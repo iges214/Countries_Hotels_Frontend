@@ -8,7 +8,7 @@ test("shows the loader before JavaScript and while the initial catalogue loads",
   let releaseProfile!: () => void;
   const moduleReady = new Promise<void>((resolve) => { releaseModule = resolve; });
   const profileReady = new Promise<void>((resolve) => { releaseProfile = resolve; });
-  await page.route("**/src/main.tsx", async (route) => {
+  await page.route((url) => url.pathname === "/src/main.tsx", async (route) => {
     await moduleReady;
     await route.continue();
   });

@@ -1249,6 +1249,11 @@
   line-height: 1.7 !important;
   margin: 15px 0 !important;
 }
+/* Keep form layouts while preventing edits during a pending save or upload. */
+.ad-form-fields {
+  display: contents;
+}
+
 .ad-branch-card {
   display: flex;
   align-items: center;
@@ -1942,6 +1947,7 @@
   .ad-branch-card > .ad-stack {
     flex-basis: 100%;
     flex-direction: row;
+    flex-wrap: wrap;
   }
   .ad-footer {
     flex-direction: column;

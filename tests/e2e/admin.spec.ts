@@ -570,6 +570,263 @@ test("branch administrators see only assigned branches and cannot grant access",
   );
 });
 
+async function confirmDiscard(page: Page, action: () => Promise<unknown>, discard = false) {
+  const handled = page.waitForEvent("dialog").then(async (dialog) => {
+    expect(dialog.type()).toBe("confirm");
+    expect(dialog.message()).toBe("Discard unsaved changes?");
+    if (discard) await dialog.accept();
+    else await dialog.dismiss();
+  });
+  await Promise.all([action(), handled]);
+}
+
+for (const editor of [
+  { path: "rooms/2", label: "Description", value: "Unsaved room description" },
+  { path: "facilities/1", label: "Name", value: "Unsaved meal name" },
+  { path: "website", label: "Display name", value: "Unsaved website name" },
+  { path: "branches", label: "Branch name", value: "Unsaved branch name" },
+  { path: "account", label: "First name", value: "Unsaved profile" },
+  { path: "administrators", label: "Account email", value: "draft@example.test" },
+]) {
+  test(`unsaved ${editor.path} changes survive cancelled navigation and can be discarded`, async ({ page }) => {
+    const { mutations } = await adminFixture(page);
+    await page.goto(`/admin/${editor.path}?branch=1`);
+    await expect(page.locator(".site-loader")).toHaveCount(0);
+    if (editor.path === "branches") await page.getByRole("button", { name: "Edit branch", exact: true }).first().click();
+    const field = page.getByRole("textbox", { name: editor.label, exact: true });
+    await field.fill(editor.value);
+    const original = page.url();
+    await confirmDiscard(page, () => page.getByRole("link", { name: "Overview", exact: true }).click());
+    await expect(page).toHaveURL(original);
+    await expect(field).toHaveValue(editor.value);
+    await confirmDiscard(page, () => page.getByRole("link", { name: "Overview", exact: true }).click(), true);
+    await expect(page).toHaveURL(/\/admin\?branch=1$/);
+    expect(mutations).toHaveLength(0);
+  });
+}
+
+test("unsaved website changes block branch switching and browser Back without losing the draft", async ({ page }) => {
+  await adminFixture(page);
+  await page.goto("/admin?branch=1");
+  await expect(page.locator(".site-loader")).toHaveCount(0);
+  await page.getByRole("link", { name: "Website settings", exact: true }).click();
+  await page.getByLabel("Display name", { exact: true }).fill("Website draft");
+  await confirmDiscard(page, () => page.getByLabel("Current branch").selectOption("2"));
+  await expect(page).toHaveURL(/\/admin\/website\?branch=1$/);
+  await expect(page.getByLabel("Current branch")).toHaveValue("1");
+  await expect(page.getByLabel("Display name", { exact: true })).toHaveValue("Website draft");
+  await confirmDiscard(page, () => page.goBack());
+  await expect(page).toHaveURL(/\/admin\/website\?branch=1$/);
+  await expect(page.getByLabel("Display name", { exact: true })).toHaveValue("Website draft");
+  await confirmDiscard(page, () => page.getByLabel("Current branch").selectOption("2"), true);
+  await expect(page).toHaveURL(/\/admin\/website\?branch=2$/);
+  await expect(page.getByLabel("Display name", { exact: true })).toHaveValue("IGES Hotel & Suites");
+});
+
+test("switching inline branch editors protects unsaved changes", async ({ page }) => {
+  const { mutations } = await adminFixture(page);
+  await page.goto("/admin/branches?branch=1");
+  await expect(page.locator(".site-loader")).toHaveCount(0);
+  const edit = page.getByRole("button", { name: "Edit branch", exact: true });
+  await edit.first().click();
+  await page.getByLabel("Branch name", { exact: true }).fill("Branch draft");
+  await confirmDiscard(page, () => edit.nth(1).click());
+  await expect(page.getByLabel("Branch name", { exact: true })).toHaveValue("Branch draft");
+  await confirmDiscard(page, () => edit.nth(1).click(), true);
+  await expect(page.getByLabel("Branch name", { exact: true })).toHaveValue("Second branch");
+  await page.getByLabel("Branch name", { exact: true }).fill("Branch action draft");
+  const deactivate = page.getByRole("button", { name: "Deactivate branch", exact: true }).first();
+  await confirmDiscard(page, () => deactivate.click());
+  await expect(page.getByLabel("Branch name", { exact: true })).toHaveValue("Branch action draft");
+  expect(mutations).toHaveLength(0);
+  await confirmDiscard(page, () => deactivate.click(), true);
+  await expect(page.getByLabel("Branch name", { exact: true })).toHaveCount(0);
+  await expect.poll(() => mutations).toContainEqual({ path: "/branches/1/active", method: "PUT", body: { isActive: false } });
+});
+
+test("failed saves keep the navigation guard and successful saves clear it", async ({ page }) => {
+  await adminFixture(page);
+  let failing = true;
+  await page.route("**/branches/1/rooms/2", (route) => route.request().method() === "PUT" && failing
+    ? route.fulfill({ status: 503, json: { detail: "Unavailable" } }) : route.fallback());
+  await page.goto("/admin/rooms/2?branch=1");
+  await expect(page.locator(".site-loader")).toHaveCount(0);
+  await page.getByLabel("Nightly rate (NGN)", { exact: true }).fill("42000.75");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await confirmDiscard(page, () => page.getByRole("link", { name: "Overview", exact: true }).click());
+  await expect(page.getByLabel("Nightly rate (NGN)", { exact: true })).toHaveValue("42000.75");
+  failing = false;
+  const prompts: string[] = [];
+  page.on("dialog", (dialog) => { prompts.push(dialog.message()); return dialog.dismiss(); });
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Room changes saved." })).toBeVisible();
+  await page.getByRole("link", { name: "Overview", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\?branch=1$/);
+  expect(prompts).toHaveLength(0);
+});
+
+test("saving an offering can redirect without prompting to discard saved changes", async ({ page }) => {
+  await adminFixture(page);
+  await page.goto("/admin/facilities/1?branch=1");
+  await expect(page.locator(".site-loader")).toHaveCount(0);
+  await page.getByLabel("Name", { exact: true }).fill("Saved meal name");
+  const prompts: string[] = [];
+  page.on("dialog", (dialog) => { prompts.push(dialog.message()); return dialog.dismiss(); });
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/facilities\?branch=1$/);
+  expect(prompts).toHaveLength(0);
+});
+
+test("reload protection and returning to the saved value do not discard a website draft", async ({ page }) => {
+  await adminFixture(page);
+  await page.goto("/admin/website?branch=1");
+  await expect(page.locator(".site-loader")).toHaveCount(0);
+  const field = page.getByRole("textbox", { name: "Display name", exact: true });
+  const original = await field.inputValue();
+  await field.fill("Reload draft");
+  let prompted = false;
+  page.once("dialog", async (dialog) => {
+    expect(dialog.type()).toBe("beforeunload");
+    prompted = true;
+    await dialog.dismiss();
+  });
+  await page.evaluate(() => location.reload());
+  expect(prompted).toBe(true);
+  await expect(field).toHaveValue("Reload draft");
+  await field.fill(original);
+  const prompts: string[] = [];
+  page.on("dialog", (dialog) => { prompts.push(dialog.message()); return dialog.dismiss(); });
+  await page.getByRole("link", { name: "Overview", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\?branch=1$/);
+  expect(prompts).toHaveLength(0);
+});
+
+for (const refreshFails of [false, true]) test(`saving a profile keeps an unfinished password form protected (refresh failure: ${refreshFails})`, async ({ page }) => {
+  await adminFixture(page);
+  let refresh = false;
+  await page.route("**/admin/me", (route) => refresh && refreshFails
+    ? route.fulfill({ status: 503, json: { detail: "Unavailable" } }) : route.fallback());
+  await page.goto("/admin/account?branch=1");
+  await expect(page.locator(".site-loader")).toHaveCount(0);
+  await page.getByRole("textbox", { name: "First name", exact: true }).fill("Saved profile");
+  await page.getByLabel("Current password", { exact: true }).fill("Password draft");
+  refresh = true;
+  await page.getByRole("button", { name: "Save profile", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Profile saved." })).toBeVisible();
+  await expect(page.getByLabel("Current password", { exact: true })).toHaveValue("Password draft");
+  if (refreshFails) await expect(page.getByRole("alert")).toBeVisible();
+  await confirmDiscard(page, () => page.getByRole("link", { name: "Overview", exact: true }).click());
+  await expect(page.getByLabel("Current password", { exact: true })).toHaveValue("Password draft");
+  await page.getByLabel("Current password", { exact: true }).fill("");
+  await page.getByRole("link", { name: "Overview", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\?branch=1$/);
+});
+
+test("closing a country editor preserves its draft when discard is cancelled", async ({ page }) => {
+  await adminFixture(page);
+  await page.goto("/admin/countries?branch=1");
+  await expect(page.locator(".site-loader")).toHaveCount(0);
+  await page.getByRole("button", { name: "Add country", exact: true }).click();
+  const modal = page.getByRole("dialog");
+  await modal.getByRole("textbox", { name: "Name", exact: true }).fill("Country draft");
+  await confirmDiscard(page, () => modal.getByRole("button", { name: "Close dialog", exact: true }).click());
+  await expect(modal.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Country draft");
+  await confirmDiscard(page, () => modal.getByRole("button", { name: "Close dialog", exact: true }).click(), true);
+  await expect(modal).toHaveCount(0);
+});
+
+test("image selection and navigation protect unsaved captions", async ({ page }) => {
+  await adminFixture(page);
+  await page.goto("/admin/images?branch=1");
+  await expect(page.locator(".site-loader")).toHaveCount(0);
+  const images = page.locator(".ad-image-tile");
+  await images.first().click();
+  await page.getByRole("textbox", { name: "Caption", exact: true }).fill("Caption draft");
+  await confirmDiscard(page, () => images.nth(1).click());
+  await expect(page.getByRole("textbox", { name: "Caption", exact: true })).toHaveValue("Caption draft");
+  await confirmDiscard(page, () => page.getByRole("link", { name: "Overview", exact: true }).click());
+  await expect(page.getByRole("textbox", { name: "Caption", exact: true })).toHaveValue("Caption draft");
+  await confirmDiscard(page, () => images.nth(1).click(), true);
+  await expect(page.getByRole("textbox", { name: "Caption", exact: true })).toHaveValue("Bathroom");
+});
+
+test("message drafts remain protected when leaving the inbox", async ({ page }) => {
+  await adminFixture(page);
+  await page.route("**/admin/mail-status", (route) => route.fulfill({ json: { replyConfigured: true, incomingEmailConnected: false } }));
+  await page.goto("/admin/messages?branch=1");
+  await expect(page.locator(".site-loader")).toHaveCount(0);
+  const reply = page.getByRole("textbox", { name: "Reply message", exact: true });
+  await reply.fill("Unsent message draft");
+  await confirmDiscard(page, () => page.getByRole("link", { name: "Overview", exact: true }).click());
+  await expect(reply).toHaveValue("Unsent message draft");
+  await confirmDiscard(page, () => page.getByRole("link", { name: "Overview", exact: true }).click(), true);
+  await expect(page).toHaveURL(/\/admin\?branch=1$/);
+});
+
+test("a completed save cannot redirect back to an editor the user already left", async ({ page }) => {
+  await adminFixture(page);
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/branches/1/offerings/1", async (route) => {
+    await pending;
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto("/admin/facilities/1?branch=1");
+  await expect(page.locator(".site-loader")).toHaveCount(0);
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill("Submitted offering");
+  try {
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Saving…" })).toBeDisabled();
+    await expect(page.getByRole("textbox", { name: "Name", exact: true })).toBeDisabled();
+    await confirmDiscard(page, () => page.getByRole("link", { name: "Overview", exact: true }).click(), true);
+    await expect(page).toHaveURL(/\/admin\?branch=1$/);
+  } finally { release(); }
+  await expect(page.getByRole("heading", { name: "A good day starts here." })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\?branch=1$/);
+});
+
+test("fractional room prices and reservation totals remain visible throughout administration", async ({ page }) => {
+  const { rooms, bookings } = await adminFixture(page);
+  rooms[0].perNightRate = 1234.56;
+  bookings[0].totalPrice = 120000.25;
+  bookings[0].assignments[0].nightlyRate = 40000.5;
+  await page.goto("/admin/rooms?branch=1");
+  await expect(page.locator(".site-loader")).toHaveCount(0);
+  await expect(page.getByText("₦1,234.56", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Bookings", exact: true }).click();
+  await expect(page.getByRole("row").filter({ hasText: "IG-1048" })).toContainText("₦120,000.25");
+  await page.getByRole("link", { name: "View", exact: true }).first().click();
+  await expect(page.getByText("₦120,000.25", { exact: true })).toBeVisible();
+  await expect(page.getByText("₦40,000.50", { exact: true })).toBeVisible();
+});
+
+test("branch management actions fit phone screens without hiding controls", async ({ page }) => {
+  await adminFixture(page);
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/admin/branches?branch=1");
+    await expect(page.getByRole("heading", { name: "Hotel branches" })).toBeVisible();
+    const card = page.locator(".ad-branch-card").first();
+    const layout = await page.evaluate(() => ({
+      viewport: innerWidth,
+      document: document.documentElement.scrollWidth,
+      actions: [...document.querySelectorAll(".ad-branch-card button")].map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { label: element.textContent?.trim() || element.getAttribute("aria-label"), left: rect.left, right: rect.right };
+      }),
+    }));
+    expect.soft(layout.document, JSON.stringify(layout)).toBeLessThanOrEqual(width);
+    for (const name of ["Set as default", "Deactivate branch", "Edit branch", "Delete Warri branch"]) {
+      const button = card.getByRole("button", { name, exact: true });
+      await expect(button).toBeVisible();
+      const box = (await button.boundingBox())!;
+      expect.soft(box.x, name).toBeGreaterThanOrEqual(0);
+      expect.soft(box.x + box.width, name).toBeLessThanOrEqual(width);
+    }
+  }
+});
+
 test("admin screens render at desktop and mobile sizes", async ({ page }) => {
   test.setTimeout(120000);
   await adminFixture(page);

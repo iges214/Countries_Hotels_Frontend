@@ -293,7 +293,7 @@ test("editing has an unsaved-changes dialog and sends owner update with explicit
   await expect(page).toHaveURL(/my-bookings\/1\/41$/);
   await expect(page.locator(".receipt-total")).toContainText("165,000");
 });
-test("session expiry preserves draft; failure states and honest recovery remain accessible", async ({
+test("session expiry preserves draft; failure states and account support remain accessible", async ({
   page,
 }) => {
   await page.addInitScript(
@@ -322,7 +322,6 @@ test("session expiry preserves draft; failure states and honest recovery remain 
     "/503",
     "/offline",
     "/unknown-route",
-    "/forgot-password",
     "/verify-email",
   ]) {
     await page.goto(route);
@@ -334,9 +333,13 @@ test("session expiry preserves draft; failure states and honest recovery remain 
   await page.goto("/forgot-password");
   await expect(
     page.getByRole("heading", {
-      name: "Online account recovery is not available yet.",
+      name: "Let’s get you back in.",
     }),
   ).toBeVisible();
+  await expect(page.getByLabel("Email address", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send reset link", exact: true })).toBeEnabled();
+  await page.goto("/verify-email");
+  await expect(page.getByRole("heading", { name: "Email verification is not available yet." })).toBeVisible();
 });
 test("500/503/network and rate limits remain visible and never fall back to fake rooms", async ({
   page,

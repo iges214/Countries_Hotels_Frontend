@@ -44,7 +44,7 @@ Published branch contact details, hero image and policies now come from the back
 
 ## Pages and integrations
 
-Home; Rooms; reusable category details with bedroom/bathroom gallery and physical room inspection; multi-room availability, account entry and final review; Register; Login; Kitchen; server-backed booking result with printing/Save PDF; My Bookings; owner booking details/edit/cancel; management contact; policies; 404/403/500/503/maintenance/offline; honest recovery and verification information.
+Home; Rooms; reusable category details with bedroom/bathroom gallery and physical room inspection; multi-room availability, account entry and final review; Register; Login; Kitchen; server-backed booking result with printing/Save PDF; My Bookings; owner booking details/edit/cancel; password recovery and reset; management contact; policies; 404/403/500/503/maintenance/offline; email-verification support information.
 
 | Feature                    | Current backend contract                                               |
 | -------------------------- | ---------------------------------------------------------------------- |
@@ -83,14 +83,14 @@ npm run preview
 Browser checks use installed Microsoft Edge in headless mode. If Edge is unavailable, install a Playwright Chromium browser and adjust `channel` in `playwright.config.ts`. `tests/e2e/flows.spec.ts` uses explicit intercepted fixtures to exercise errors and conflicts. The separately opt-in real-backend test uses the supplied controller/service code and an isolated in-memory SQLite database:
 
 ```powershell
-# Terminal 1: requires the backend's .NET 9 SDK and restored packages
+# Terminal 1: requires the backend's .NET 10 SDK and restored packages
 dotnet run --project tests/ApiHarness/ApiHarness.csproj
 # Terminal 2: Vite running on 5173, then:
 $env:IGES_REAL_BACKEND_TESTS='1'
-npm run test:e2e -- tests/e2e/backend.spec.ts
+npm run test:e2e -- tests/e2e/backend.spec.ts tests/e2e/admin-backend.spec.ts tests/e2e/recovery-backend.spec.ts
 ```
 
-The harness never touches configured SQL Server or real hotel data. Stop it after verification. It is test-only and must not be deployed. `tests/visual.mjs` captures labelled preview pages at 1440×1000 and 390×844 into `verification/`.
+The harness never touches configured SQL Server or real hotel data. It captures reset messages in memory instead of sending email; its loopback-only `/harness/reset-link` endpoint is for browser verification. Stop it after verification. It is test-only and must not be deployed. `tests/visual.mjs` captures labelled preview pages at 1440×1000 and 390×844 into `verification/`.
 
 Deploy only `dist/`, with same-origin reverse proxy routes for `/api/` and `/uploads/`, and an SPA fallback for all frontend routes. An Nginx example is in `deployment/nginx.conf.example`; adapt its host/upstream/certificates to your deployment. Vite's development proxy is not part of a production build. Do not rewrite API errors to `index.html`. The backend currently has no CORS policy; direct cross-origin deployment requires an explicit backend configuration change. Sensitive page metadata uses `noindex,nofollow`; authenticated API responses should not be cached.
 
@@ -98,7 +98,11 @@ Deploy only `dist/`, with same-origin reverse proxy routes for `/api/` and `/upl
 
 Supply the real branch inventory, prices, bedroom/bathroom photographs, menus and verified contact details through the appropriate backend administration/configuration. Provide approved privacy, cancellation, no-show, refund and check-in/out policies. Confirm actual breakfast inclusions; the current room DTO has none. No binding policy or free-breakfast claim is invented.
 
-Password reset, reset-success, email verification/resend and expired-link URLs provide honest support information. Implement public request-reset/reset/verify/resend endpoints, Identity token validation and a configured email delivery service before enabling those actions. `AddIdentityApiEndpoints` alone does not expose these flows: the backend does not call `MapIdentityApi` and only its register/login controllers are available. No mandatory verification is imposed.
+Password recovery uses `POST /api/v1/auth/forgot-password` and `POST /api/v1/auth/reset-password`. Configure `PasswordReset:FrontendUrl` and `HotelMail` on the backend for real delivery. Requests give the same public confirmation for existing and unknown accounts, and for unavailable delivery. A successful reset invalidates the account's previous access and refresh sessions. Expired, invalid and reused links can be replaced through the recovery form. Email verification/resend remains unavailable; no mandatory verification is imposed.
+
+Admin prices and totals preserve fractional amounts. Admin drafts are guarded across internal links, branch changes, browser Back and reloads. Cancelling a discard confirmation retains the draft; a successful save clears the corresponding guard. Failed saves retain it.
+
+The legacy `/reset-success` URL provides reset guidance. A password-change confirmation is shown only after the reset endpoint accepts the new password.
 
 The booking DTO exposes room IDs but not room numbers/room snapshots; receipts therefore show the actual server room IDs. It also exposes no payment status. Full SQL Server migration/concurrency and real hotel delivery/asset validation remain deployment checks.
 

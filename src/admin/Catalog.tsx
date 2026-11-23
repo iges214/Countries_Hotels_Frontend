@@ -277,7 +277,7 @@ function RoomForm({ room }: { room?: AdminRoom }) {
   const [form, setForm] = useState<RoomInput>(initial);
   const [saved, setSaved] = useState(JSON.stringify(initial));
   const dirty = JSON.stringify(form) !== saved;
-  useDirtyGuard(dirty);
+  const guard = useDirtyGuard(dirty);
   const set = <K extends keyof RoomInput>(key: K, value: RoomInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
   const category = categoryFor(form.number);
@@ -285,8 +285,7 @@ function RoomForm({ room }: { room?: AdminRoom }) {
     !!room?.photos.some((p) => p.kind === "Room") &&
     !!room.photos.some((p) => p.kind === "Bathroom");
   const cancel = (path: string) => {
-    if (!dirty || window.confirm("Discard unsaved room changes?"))
-      navigate(to(path));
+    navigate(to(path));
   };
   return (
     <form
@@ -300,6 +299,7 @@ function RoomForm({ room }: { room?: AdminRoom }) {
                 "Choose a room number within a supported range.",
               );
             const result = await adminApi.saveRoom(branch!.id, room?.id, form);
+            if (!guard.markClean()) return;
             setSaved(JSON.stringify(form));
             refreshBranches();
             navigate(to("rooms/" + result.id), { replace: true });
@@ -310,6 +310,7 @@ function RoomForm({ room }: { room?: AdminRoom }) {
         );
       }}
     >
+      <fieldset className="ad-form-fields" disabled={action.busy}>
       <PageTitle
         title={room ? "Edit room " + room.number : "Add a room"}
         description="A welcoming stay begins with the details."
@@ -464,13 +465,7 @@ function RoomForm({ room }: { room?: AdminRoom }) {
                   type="button"
                   className="ad-btn"
                   onClick={() => {
-                    if (
-                      !dirty ||
-                      window.confirm(
-                        "Discard unsaved room changes and open photographs?",
-                      )
-                    )
-                      navigate(to("images") + "&room=" + room.id);
+                    navigate(to("images") + "&room=" + room.id);
                   }}
                 >
                   <ImagePlus size={17} />
@@ -528,6 +523,7 @@ function RoomForm({ room }: { room?: AdminRoom }) {
           </Card>
         </div>
       </div>
+    </fieldset>
     </form>
   );
 }
@@ -559,6 +555,8 @@ export function ImageLibrary() {
   const photo = photos.find((p) => p.id === selected);
   const [editCaption, setEditCaption] = useState("");
   const [editKind, setEditKind] = useState("Room");
+  const detailsGuard = useDirtyGuard(Boolean(photo) && (editCaption !== photo!.caption || editKind !== photo!.kind));
+  const uploadGuard = useDirtyGuard(upload && Boolean(file || caption));
   const [deleting, setDeleting] = useState(false);
   const paged = usePagination(filtered, roomId + kind, 9);
   return (
@@ -572,6 +570,8 @@ export function ImageLibrary() {
             className="ad-btn gold"
             disabled={!data.data?.length}
             onClick={() => {
+              if (!detailsGuard.confirmDiscard()) return;
+              setSelected(undefined);
               setTarget(roomId || String(data.data?.[0]?.id || ""));
               setUpload(true);
             }}
@@ -591,6 +591,7 @@ export function ImageLibrary() {
           <select
             value={roomId}
             onChange={(e) => {
+              if (!detailsGuard.confirmDiscard()) return;
               setRoomId(e.target.value);
               setSelected(undefined);
             }}
@@ -627,6 +628,7 @@ export function ImageLibrary() {
                   }
                   key={p.id}
                   onClick={() => {
+                    if (p.id === selected || !detailsGuard.confirmDiscard()) return;
                     setSelected(p.id);
                     setEditCaption(p.caption);
                     setEditKind(p.kind);
@@ -678,10 +680,12 @@ export function ImageLibrary() {
                       editKind,
                       editCaption,
                     );
+                    detailsGuard.markClean();
                     data.retry();
                   }, "Photograph details saved.");
                 }}
               >
+                <fieldset className="ad-form-fields" disabled={action.busy}>
                 <Field label="Photo type">
                   <select
                     value={editKind}
@@ -701,6 +705,7 @@ export function ImageLibrary() {
                 <button className="ad-btn gold full" disabled={action.busy}>
                   Save details
                 </button>
+              </fieldset>
               </form>
               <button
                 className="ad-btn danger full"
@@ -717,7 +722,12 @@ export function ImageLibrary() {
       {upload && (
         <Modal
           title="Upload a room photograph"
-          onClose={() => !action.busy && setUpload(false)}
+          onClose={() => {
+            if (action.busy || !uploadGuard.confirmDiscard()) return;
+            setUpload(false);
+            setFile(undefined);
+            setCaption("");
+          }}
         >
           <div className="admin-app ad-modal-content">
             <form
@@ -742,6 +752,7 @@ export function ImageLibrary() {
                 }
               }}
             >
+              <fieldset className="ad-form-fields" disabled={action.busy}>
               <Field label="Room">
                 <select
                   required
@@ -784,6 +795,7 @@ export function ImageLibrary() {
                 <Upload size={17} />
                 {action.busy ? "Uploading…" : "Upload photograph"}
               </button>
+            </fieldset>
             </form>
           </div>
         </Modal>
@@ -992,9 +1004,9 @@ function OfferingForm({
     imageUrl: initial.imageUrl,
     isPublished: initial.isPublished,
   });
-  const [baseline] = useState(JSON.stringify(form));
+  const [baseline, setBaseline] = useState(JSON.stringify(form));
   const dirty = baseline !== JSON.stringify(form);
-  useDirtyGuard(dirty);
+  const guard = useDirtyGuard(dirty);
   const [deleting, setDeleting] = useState(false);
   const set = <K extends keyof OfferingInput>(
     key: K,
@@ -1007,10 +1019,13 @@ function OfferingForm({
           e.preventDefault();
           await action.run(async () => {
             await adminApi.saveOffering(branch!.id, id, form);
+            if (!guard.markClean()) return;
+            setBaseline(JSON.stringify(form));
             navigate(to("facilities"));
           }, "Offering saved.");
         }}
       >
+        <fieldset className="ad-form-fields" disabled={action.busy || upload.busy}>
         <PageTitle
           title={id ? "Edit offering" : "Add offering"}
           description="Bring the best of your hotel to your guests."
@@ -1019,8 +1034,7 @@ function OfferingForm({
             type="button"
             className="ad-btn"
             onClick={() => {
-              if (!dirty || window.confirm("Discard unsaved offering changes?"))
-                navigate(to("facilities"));
+              navigate(to("facilities"));
             }}
           >
             Cancel
@@ -1166,6 +1180,7 @@ function OfferingForm({
             )}
           </div>
         </div>
+      </fieldset>
       </form>
       {deleting && (
         <Modal
@@ -1184,6 +1199,7 @@ function OfferingForm({
               onClick={() =>
                 action.run(async () => {
                   await adminApi.deleteOffering(branch!.id, id!);
+                  if (!guard.markClean()) return;
                   navigate(to("facilities"));
                 }, "Offering deleted.")
               }

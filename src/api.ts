@@ -40,6 +40,7 @@ export function parseSession(token: string): AuthSession {
     token,
     id: claims.sub,
     name: claims.name || "Guest",
+    email: typeof claims.email === "string" ? claims.email : undefined,
     expires: claims.exp * 1000,
     renewal:
       typeof claims.session_id === "string" &&
@@ -317,7 +318,7 @@ export const api = {
   branch: async (id: number): Promise<Branch> =>
     DEMO
       ? (await import("./demo")).branches.find((b) => b.id === id)!
-      : request("/branches/" + id),
+      : request("/branches/" + id, {}, !!getSession()),
   rooms: async (s: Stay, multiple = false): Promise<Room[]> =>
     DEMO
       ? (await import("./demo")).findRooms(s, multiple)
@@ -356,6 +357,16 @@ export const api = {
       },
       true,
     ),
+  forgotPassword: (email: string) =>
+    request<void>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  resetPassword: (email: string, token: string, newPassword: string) =>
+    request<void>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ email, token, newPassword }),
+    }),
   login: async (email: string, password: string) => {
     const token = await request<string>("/auth/login", {
       method: "POST",

@@ -115,6 +115,7 @@ export interface AuthSession {
   token: string;
   id: string;
   name: string;
+  email?: string;
   expires: number;
   renewal?: { id: string; idleUntil: number; sessionUntil: number };
 }

@@ -35,6 +35,7 @@ import { useData } from "../hooks";
 import { adminApi } from "./api";
 import { AdminContext } from "./context";
 import { Card, useAction } from "./ui";
+import { AdminNavigationGuard } from "./NavigationGuard";
 import { Overview, Bookings, BookingDetails, Guests } from "./Reservations";
 import {
   Rooms,
@@ -165,6 +166,21 @@ function AdminWorkspace() {
   const [menu, setMenu] = useState(false);
   const identity = useData(adminApi.me, [auth?.id]);
   const branchData = useData(adminApi.branches, [auth?.id]);
+  const [refreshError, setRefreshError] = useState<unknown>();
+  function refreshAccess() {
+    setRefreshError(undefined);
+    void adminApi.me().then(identity.setData).catch((error) => {
+      if (error instanceof ApiError && [401, 403].includes(error.status)) identity.retry();
+      else setRefreshError(error);
+    });
+  }
+  function refreshBranches() {
+    setRefreshError(undefined);
+    void adminApi.branches().then(branchData.setData).catch((error) => {
+      if (error instanceof ApiError && [401, 403].includes(error.status)) branchData.retry();
+      else setRefreshError(error);
+    });
+  }
   const access = identity.data;
   const branches = (branchData.data || []).filter(
     (b) => access?.isSystemAdministrator || access?.branchIds.includes(b.id),
@@ -226,8 +242,8 @@ function AdminWorkspace() {
         branches,
         branch,
         to,
-        refreshAccess: identity.retry,
-        refreshBranches: branchData.retry,
+        refreshAccess,
+        refreshBranches,
       }}
     >
       <div className="admin-app">
@@ -351,6 +367,7 @@ function AdminWorkspace() {
                 (loc.pathname.includes("account") ? "My account" : "Overview")}
             </div>
             <div key={(branch?.id || 0) + access.id}>
+              <ErrorBox error={refreshError} retry={() => { refreshAccess(); refreshBranches(); }} />
               <Routes>
                 <Route index element={<Overview />} />
                 <Route path="rooms" element={<Rooms />} />
@@ -396,11 +413,13 @@ function AdminWorkspace() {
 }
 export function AdminApp() {
   return (
+    <AdminNavigationGuard>
     <div className="admin-root">
       <Routes>
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin/*" element={<AdminWorkspace />} />
       </Routes>
     </div>
+    </AdminNavigationGuard>
   );
 }

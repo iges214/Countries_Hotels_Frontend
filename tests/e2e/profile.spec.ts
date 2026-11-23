@@ -175,5 +175,7 @@ test("a guest can update personal details and change their password", async ({
     newPassword: "NewPassword1!",
   });
   await expect(page).toHaveURL(/\/login\?returnTo=%2Fprofile$/);
-  await expect(page.getByRole("status")).toContainText("Password updated.");
+  await expect(page.getByRole("status").filter({ hasText: "Password updated." })).toContainText(
+    "Password updated. Sign in again with your new password.",
+  );
 });

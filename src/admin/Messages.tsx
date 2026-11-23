@@ -4,6 +4,7 @@ import { ErrorBox, Loading } from "../components";
 import { useData } from "../hooks";
 import { adminApi, type HotelMessage } from "./api";
 import { useAdmin } from "./context";
+import { useDirtyGuard } from "./NavigationGuard";
 import {
   Badge,
   Card,
@@ -41,6 +42,7 @@ export function Messages() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<number>();
   const [drafts, setDrafts] = useState<Record<number, string>>({});
+  useDirtyGuard(Object.values(drafts).some(Boolean));
   const [requests, setRequests] = useState<Record<number, string>>({});
   const action = useAction();
   const messages = data.data?.[0] || [];
@@ -260,6 +262,7 @@ export function Messages() {
                         }, "Reply submitted. Review its delivery status in the conversation.");
                       }}
                     >
+                      <fieldset className="ad-form-fields" disabled={action.busy}>
                       <label className="ad-field">
                         <span className="sr-only">Reply message</span>
                         <textarea
@@ -300,6 +303,7 @@ export function Messages() {
                           again.
                         </p>
                       )}
+                    </fieldset>
                     </form>
                   </Card>
                 </>

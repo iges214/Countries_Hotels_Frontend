@@ -218,6 +218,41 @@ describe("typed API boundaries", () => {
     await expect(api.bookings(1)).rejects.toMatchObject({ status: 401 });
     expect(fetch).not.toHaveBeenCalled();
   });
+  it("loads inactive branch inventory only through an authenticated administration request", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      data: [{ id: 1, isActive: false, timeZoneId: "Africa/Lagos" }],
+      metadata: { hasNext: false },
+    })));
+    vi.stubGlobal("fetch", fetch);
+    const { setToken } = await import("../src/api");
+    const { adminApi } = await import("../src/admin/api");
+    await expect(adminApi.branches()).rejects.toMatchObject({ status: 401 });
+    expect(fetch).not.toHaveBeenCalled();
+    const token = "x." + btoa(JSON.stringify({ sub: "staff", exp: Math.floor(Date.now() / 1000) + 60 })) + ".x";
+    setToken(token);
+    const branches = await adminApi.branches();
+    expect(branches[0]).toMatchObject({ id: 1, isActive: false });
+    expect(fetch.mock.calls[0][0]).toContain("includeInactive=true");
+    expect(fetch.mock.calls[0][1].headers.Authorization).toBe("Bearer " + token);
+  });
+  it("preserves fractional admin prices, totals and zero amounts without adding decimals to whole prices", async () => {
+    const { money: adminMoney } = await import("../src/admin/ui");
+    expect(adminMoney(1234.56)).toBe("₦1,234.56");
+    expect(adminMoney(1234.5)).toBe("₦1,234.50");
+    expect(adminMoney(1234)).toBe("₦1,234");
+    expect(adminMoney(0)).toBe("₦0");
+    expect(adminMoney(0.01)).toBe("₦0.01");
+    expect(adminMoney(1234.56, "USD")).toContain("1,234.56");
+  });
+  it("authenticates branch detail reads for an existing booking owner", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 1, isActive: false })));
+    vi.stubGlobal("fetch", fetch);
+    const { api, setToken } = await import("../src/api");
+    const token = "x." + btoa(JSON.stringify({ sub: "owner", exp: Math.floor(Date.now() / 1000) + 60 })) + ".x";
+    setToken(token);
+    expect(await api.branch(1)).toMatchObject({ id: 1, isActive: false });
+    expect(fetch.mock.calls[0][1].headers.Authorization).toBe("Bearer " + token);
+  });
   it("handles a raw login token and removes it on sign out", async () => {
     const token =
       "x." +

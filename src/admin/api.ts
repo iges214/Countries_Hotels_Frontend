@@ -140,7 +140,7 @@ const send = <T>(path: string, method: string, value?: unknown) =>
 export const adminApi = {
   me: () => request<AdminAccess>("/admin/me", {}, true),
   branches: async () =>
-    (await allPages<AdminBranch>("/branches")).map((b) => ({
+    (await allPages<AdminBranch>("/branches", { includeInactive: true }, true)).map((b) => ({
       ...b,
       timeZoneId: b.browserTimeZoneId || b.timeZoneId,
     })),
